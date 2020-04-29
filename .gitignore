@@ -108,6 +108,7 @@ types
 # TernJS port file
 .tern-port
 *.tsbuildinfo
+package-lock.json
 
 dist/
 .idea
