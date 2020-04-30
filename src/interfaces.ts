@@ -1,3 +1,19 @@
+import { Account } from "@liskhq/lisk-transactions/dist-node";
+
+export interface ContractInterface extends Account{
+    readonly asset: ContractAsset;
+}
+
+export interface ContractAsset {
+    readonly type: string;
+    readonly state: string;
+    readonly unit: UnitAsset;
+    readonly recipientPublicKey: string;
+    readonly senderPublicKey: string;
+    readonly rev: number;
+    readonly start?: number;
+    readonly payments: number;
+}
 
 export interface TransactionJSON {
     readonly id?: string;
@@ -27,6 +43,7 @@ export interface CreateAssetJSON {
     readonly unit: UnitAsset;
     readonly recipientPublicKey: string;
     readonly senderPublicKey: string;
+    readonly timestamp: number;
     readonly data?: string;
 }
 

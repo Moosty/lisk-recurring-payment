@@ -6,67 +6,37 @@ import {
     StateStorePrepare,
     TransactionError,
     convertToAssetError,
-    constants,
 } from '@liskhq/lisk-transactions';
-import {TYPES, PAYMENT_TYPE} from '../constants';
+import { PAYMENT_TYPE, STATES} from '../constants';
 import {CreateContractAssetSchema} from '../schemas';
-import {CreateTransactionJSON, CreateAssetJSON} from '../interfaces';
+import {RequestTransactionJSON, RequestAssetJSON, ContractInterface} from '../interfaces';
+import {getContractAddress} from "../utils";
 
 export class RequestPayment extends BaseTransaction {
-    readonly asset: CreateAssetJSON;
+    readonly asset: RequestAssetJSON;
 
     public constructor(rawTransaction: unknown) {
         super(rawTransaction);
         const tx = (typeof rawTransaction === 'object' && rawTransaction !== null
             ? rawTransaction
-            : {}) as Partial<CreateTransactionJSON>;
+            : {}) as Partial<RequestTransactionJSON>;
 
         if (tx.asset) {
             this.asset = {
                 ...tx.asset,
-            } as CreateAssetJSON;
+            } as RequestAssetJSON;
         } else {
-            this.asset = {} as CreateAssetJSON;
+            this.asset = {} as RequestAssetJSON;
         }
     }
 
     protected assetToBytes(): Buffer {
-        const unitAmount = intToBuffer(
-            this.asset.unit.amount.toString(),
-            constants.BYTESIZES.AMOUNT,
-            'big',
-        );
-
-        const typeBuffer = intToBuffer(
-            TYPES.indexOf(this.asset.unit.type),
-            2
-        );
-
-        const typeAmountBuffer = intToBuffer(
-            this.asset.unit.typeAmount, 2
-        );
-        const prepaidBuffer = intToBuffer(
-            this.asset.unit.prepaid, 2
-        );
-
-        const totalBuffer = intToBuffer(
-            this.asset.unit.total, 2
-        );
-
-        const terminateFeeBuffer = intToBuffer(
-            this.asset.unit.terminateFee, 2
+        const unitBuffer = intToBuffer(
+            this.asset.unit, 2
         );
 
         const contractPublicKeyBuffer = this.asset.contractPublicKey
             ? stringToBuffer(this.asset.contractPublicKey)
-            : Buffer.alloc(0);
-
-        const recipientPublicKeyBuffer = this.asset.recipientPublicKey
-            ? stringToBuffer(this.asset.recipientPublicKey)
-            : Buffer.alloc(0);
-
-        const senderPublicKeyBuffer = this.asset.senderPublicKey
-            ? stringToBuffer(this.asset.senderPublicKey)
             : Buffer.alloc(0);
 
         const dataBuffer = this.asset.data
@@ -75,14 +45,7 @@ export class RequestPayment extends BaseTransaction {
 
         return Buffer.concat([
             contractPublicKeyBuffer,
-            recipientPublicKeyBuffer,
-            senderPublicKeyBuffer,
-            typeBuffer,
-            typeAmountBuffer,
-            unitAmount,
-            prepaidBuffer,
-            totalBuffer,
-            terminateFeeBuffer,
+            unitBuffer,
             dataBuffer,
         ]);
     }
@@ -93,10 +56,7 @@ export class RequestPayment extends BaseTransaction {
                 address: this.senderId,
             },
             {
-                publicKey: this.asset.senderPublicKey,
-            },
-            {
-                publicKey: this.asset.recipientPublicKey,
+                address: getContractAddress(this.asset.contractPublicKey),
             },
         ]);
     }
@@ -104,79 +64,117 @@ export class RequestPayment extends BaseTransaction {
     public assetToJSON(): object {
         return {
             ...this.asset,
-            unit: {
-                ...this.asset.unit,
-                amount: this.asset.unit.amount.toString(),
-            }
         }
     }
 
     protected validateAsset(): ReadonlyArray<TransactionError> {
         const asset = this.assetToJSON();
         const schemaErrors = validator.validate(CreateContractAssetSchema, asset);
-        const errors = convertToAssetError(
+        return convertToAssetError(
             this.id,
             schemaErrors,
         ) as TransactionError[];
-
-
-        if (this.senderPublicKey !== this.asset.recipientPublicKey && this.senderPublicKey !== this.asset.senderPublicKey) {
-            errors.push(
-                new TransactionError(
-                    '`.asset.recipientPublicKey` or `.asset.senderPublicKey` should be the same as `senderPublicKey`.',
-                    this.id,
-                    '.senderPublicKey',
-                    this.senderPublicKey,
-                    `${this.asset.recipientPublicKey} | ${this.asset.senderPublicKey}`
-                ),
-            );
-        }
-        // todo: what to check
-
-        return errors;
     }
 
     protected async applyAsset(store: StateStore): Promise<ReadonlyArray<TransactionError>> {
         const errors: TransactionError[] = [];
-        const contract = await store.account.getOrDefault(this.senderId);
+        const sender = await store.account.get(this.senderId);
+        const contract = await store.account.getOrDefault(getContractAddress(this.asset.contractPublicKey)) as ContractInterface;
 
-        if (contract.balance > 0 || contract.publicKey !== this.asset.contractPublicKey || Object.keys(contract.asset).length > 0) {
+        if (contract.asset.type !== PAYMENT_TYPE) {
             errors.push(
                 new TransactionError(
-                    '`contractPublicKey` already exists.',
+                    '`contractPublicKey` not a recurring payment contract.',
                     this.id,
-                    '.contractPublicKey',
+                    '.asset.contractPublicKey',
                     this.asset.contractPublicKey,
                 ),
             );
         }
 
-        const updatedContract = {
+        if (contract.asset.recipientPublicKey !== this.senderPublicKey) {
+            errors.push(
+                new TransactionError(
+                    'Sender is not recipient in contract',
+                    this.id,
+                    '.senderPublicKey',
+                    this.senderPublicKey,
+                    contract.asset.recipientPublicKey
+                ),
+            );
+        }
+
+        if (contract.asset.state !== STATES.ACTIVE) {
+            errors.push(
+                new TransactionError(
+                    'Recurring payment contract is not active',
+                    this.id,
+                    '.state',
+                    contract.asset.state,
+                    STATES.ACTIVE
+                ),
+            );
+        }
+
+        if (contract.asset.payments + 1 !== this.asset.unit) {
+            errors.push(
+                new TransactionError(
+                    'Wrong unit number',
+                    this.id,
+                    '.unit',
+                    this.asset.unit,
+                    contract.asset.payments + 1
+                ),
+            );
+        }
+
+        if (contract.balance < BigInt(contract.asset.unit.amount)) {
+            errors.push(
+                new TransactionError(
+                    'Contract balance is too low',
+                    this.id,
+                    '.balance',
+                    contract.balance.toString(),
+                    `> ${contract.asset.unit.amount}`
+                ),
+            );
+        }
+
+        contract.balance -= BigInt(contract.asset.unit.amount);
+
+        const updatedContract: ContractInterface = {
             ...contract,
-            publicKey: this.asset.contractPublicKey,
             asset: {
-                type: PAYMENT_TYPE,
-                unit: {
-                    ...this.asset.unit,
-                },
-                recipientPublicKey: this.asset.recipientPublicKey,
-                senderPublicKey: this.asset.senderPublicKey,
+                ...contract.asset,
+                state: this.asset.unit < contract.asset.unit.total ? STATES.ACTIVE : STATES.ENDED,
+                payments: contract.asset.payments + 1,
             },
         };
         store.account.set(updatedContract.address, updatedContract);
+
+        sender.balance += BigInt(contract.asset.unit.amount);
+        store.account.set(this.senderId, sender);
 
         return errors;
     }
 
     protected async undoAsset(store: StateStore): Promise<ReadonlyArray<TransactionError>> {
-        const contract = await store.account.getOrDefault(this.senderId);
+        const sender = await store.account.get(this.senderId);
+        const contract = await store.account.getOrDefault(getContractAddress(this.asset.contractPublicKey)) as ContractInterface;
+        contract.balance += BigInt(contract.asset.unit.amount);
+
         const updatedContract = {
             ...contract,
-            asset: {},
-            publicKey: "",
+            asset: {
+                ...contract.asset,
+                state: STATES.ACTIVE,
+                payments: contract.asset.payments - 1,
+            },
         };
         store.account.set(updatedContract.address, updatedContract);
 
+        sender.balance -= BigInt(contract.asset.unit.amount);
+        store.account.set(this.senderId, sender);
         return [];
     }
 }

@@ -1,5 +1,10 @@
 
 module.exports = {
+  globals: {
+    'ts-jest': {
+      tsConfig: './tsconfig.json'
+    }
+  },
   collectCoverage: true,
   reporters: [
     "default",
@@ -17,5 +22,7 @@ module.exports = {
   coveragePathIgnorePatterns: [
     '<rootDir>/test/helpers/',
     '<rootDir>/test/fixtures/'
-  ]
+  ],
+  resetModules: true,
+  restoreMocks: true,
 };

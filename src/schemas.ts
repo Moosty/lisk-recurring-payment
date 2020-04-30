@@ -1,7 +1,7 @@
 
 export const CreateContractAssetSchema = {
     type: 'object',
-    required: ['contractPublicKey', 'unit', 'recipientPublicKey', 'senderPublicKey'],
+    required: ['unit', 'recipientPublicKey', 'senderPublicKey', 'timestamp'],
     properties: {
         contractPublicKey: {
             type: 'string',
@@ -13,7 +13,7 @@ export const CreateContractAssetSchema = {
             properties: {
                 type: {
                     type: 'string',
-                    enum: ['minutes', 'hours', 'days', 'months', 'years'],
+                    enum: ['MINUTES', 'HOURS', 'DAYS', 'MONTHS', 'YEARS'],
                 },
                 typeAmount: {
                     type: 'integer',
@@ -44,6 +44,10 @@ export const CreateContractAssetSchema = {
         senderPublicKey: {
             type: 'string',
             format: 'publicKey',
+        },
+        timestamp: {
+            type: 'integer',
+            minimum: 1,
         },
         data: {
             type: 'string',

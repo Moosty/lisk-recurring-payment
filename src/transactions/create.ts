@@ -8,14 +8,14 @@ import {
     convertToAssetError,
     constants,
 } from '@liskhq/lisk-transactions';
-import {TYPES, PAYMENT_TYPE} from '../constants';
+import {TYPES, PAYMENT_TYPE, STATES} from '../constants';
 import {CreateContractAssetSchema} from '../schemas';
 import {CreateTransactionJSON, CreateAssetJSON} from '../interfaces';
 import {getContractAddress, assetBytesToPublicKey} from '../utils';
 
 export class CreateContract extends BaseTransaction {
     public readonly asset: CreateAssetJSON;
-    public readonly TYPE = 112;
+    public readonly TYPE = 123;
 
     public constructor(rawTransaction: unknown) {
         super(rawTransaction);
@@ -32,8 +32,12 @@ export class CreateContract extends BaseTransaction {
         }
     }
 
+    public getContractPublicKey(): string {
+        return assetBytesToPublicKey(this.assetToBytes().toString());
+    }
+
     public getContractId(): string {
-        return getContractAddress(assetBytesToPublicKey(this.getBasicBytes().toString()));
+        return getContractAddress(this.getContractPublicKey());
     }
 
     protected assetToBytes(): Buffer {
@@ -48,9 +52,14 @@ export class CreateContract extends BaseTransaction {
             2
         );
 
+        const timestampBuffer = intToBuffer(
+            this.asset.timestamp, 4
+        );
+
         const typeAmountBuffer = intToBuffer(
             this.asset.unit.typeAmount, 2
         );
+
         const prepaidBuffer = intToBuffer(
             this.asset.unit.prepaid, 2
         );
@@ -62,8 +71,6 @@ export class CreateContract extends BaseTransaction {
         const terminateFeeBuffer = intToBuffer(
             this.asset.unit.terminateFee, 2
         );
-
-        const contractPublicKeyBuffer = stringToBuffer(assetBytesToPublicKey(this.getBasicBytes().toString()));
 
         const recipientPublicKeyBuffer = this.asset.recipientPublicKey
             ? stringToBuffer(this.asset.recipientPublicKey)
@@ -78,7 +85,6 @@ export class CreateContract extends BaseTransaction {
             : Buffer.alloc(0);
 
         return Buffer.concat([
-            contractPublicKeyBuffer,
             recipientPublicKeyBuffer,
             senderPublicKeyBuffer,
             typeBuffer,
@@ -88,6 +94,7 @@ export class CreateContract extends BaseTransaction {
             totalBuffer,
             terminateFeeBuffer,
             dataBuffer,
+            timestampBuffer,
         ]);
     }
 
@@ -95,12 +102,6 @@ export class CreateContract extends BaseTransaction {
         await store.account.cache([
             {
                 address: this.senderId,
-            },
-            {
-                publicKey: this.asset.senderPublicKey,
-            },
-            {
-                publicKey: this.asset.recipientPublicKey,
             },
             {
                 address: this.getContractId(),
@@ -137,7 +138,18 @@ export class CreateContract extends BaseTransaction {
                 ),
             );
         }
-        // todo: what to check
+
+        if (this.asset.contractPublicKey && this.asset.contractPublicKey !== this.getContractPublicKey()) {
+            errors.push(
+                new TransactionError(
+                    '`.asset.contractPublicKey` should be different.',
+                    this.id,
+                    '.asset.contractPublicKey',
+                    this.asset.contractPublicKey,
+                    this.getContractPublicKey()
+                ),
+            );
+        }
 
         return errors;
     }
@@ -159,17 +171,21 @@ export class CreateContract extends BaseTransaction {
 
         const updatedContract = {
             ...contract,
-            publicKey: this.asset.contractPublicKey,
+            publicKey: this.getContractPublicKey(),
             asset: {
                 type: PAYMENT_TYPE,
+                rev: 0,
+                state: this.asset.senderPublicKey === this.senderPublicKey ? STATES.RECIPIENT_REVIEW : STATES.SENDER_REVIEW,
                 unit: {
                     ...this.asset.unit,
                 },
                 recipientPublicKey: this.asset.recipientPublicKey,
                 senderPublicKey: this.asset.senderPublicKey,
+                payments: 0,
             },
         };
-        store.account.set(updatedContract.address, updatedContract);
+
+        store.account.set(contract.address, updatedContract);
 
         return errors;
     }
@@ -179,7 +195,6 @@ export class CreateContract extends BaseTransaction {
         const updatedContract = {
             ...contract,
             asset: {},
-            publicKey: "",
         };
         store.account.set(updatedContract.address, updatedContract);
 
