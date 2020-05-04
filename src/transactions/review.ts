@@ -8,10 +8,12 @@ import {
     convertToAssetError,
     constants,
 } from '@liskhq/lisk-transactions';
+import _ from 'lodash';
 import {TYPES, PAYMENT_TYPE, STATES} from '../constants';
 import {ReviewContractAssetSchema} from '../schemas';
 import {ReviewTransactionJSON, ReviewAssetJSON, ContractInterface} from '../interfaces';
 import {getContractAddress} from '../utils';
+import {Account} from "@liskhq/lisk-transactions/dist-node";
 
 export class ReviewContract extends BaseTransaction {
     public readonly asset: ReviewAssetJSON;
@@ -113,14 +115,62 @@ export class ReviewContract extends BaseTransaction {
             schemaErrors,
         ) as TransactionError[];
 
+        if (this.asset.accept && (this.asset.unit || this.asset.unitOld)) {
+            errors.push(
+                new TransactionError(
+                    'When `.asset.accept === true`, `.asset.unit` and `.asset.unitOld` are not allowed.',
+                    this.id,
+                    '.asset.accept',
+                    `${this.asset.accept}`,
+                ),
+            );
+        }
+
+        if (!this.asset.accept && !this.asset.unitOld) {
+            errors.push(
+                new TransactionError(
+                    'Missing `.asset.unitOld`.',
+                    this.id,
+                    '.asset.unitOld',
+                ),
+            );
+        }
+
+        if (!this.asset.accept && !this.asset.unit) {
+            errors.push(
+                new TransactionError(
+                    'Missing `.asset.unit`.',
+                    this.id,
+                    '.asset.unit',
+                ),
+            );
+        }
+
+        if (!this.asset.accept && this.asset.unitOld && this.asset.unit) {
+            const unitKeys = Object.keys(this.asset.unit);
+            const unitOldKeys = Object.keys(this.asset.unitOld);
+            if (!_.isEqual(unitKeys, unitOldKeys)) {
+                errors.push(
+                    new TransactionError(
+                        '`.asset.unit` and `.asset.unitOld` should have the same keys.',
+                        this.id,
+                        '.asset.unit',
+                        JSON.stringify(unitKeys),
+                        JSON.stringify(unitOldKeys),
+                    ),
+                );
+            }
+        }
+
         return errors;
     }
 
     protected async applyAsset(store: StateStore): Promise<ReadonlyArray<TransactionError>> {
         const errors: TransactionError[] = [];
         const contract = await store.account.getOrDefault(getContractAddress(this.asset.contractPublicKey)) as ContractInterface;
+        // todo check if right sender does the action
 
-        if (contract.asset.type !== PAYMENT_TYPE) {
+        if (contract.asset && contract.asset.type !== PAYMENT_TYPE) {
             errors.push(
                 new TransactionError(
                     '`contractPublicKey` not a recurring payment contract.',
@@ -131,7 +181,8 @@ export class ReviewContract extends BaseTransaction {
             );
         }
 
-        if (contract.asset.senderPublicKey !== this.senderPublicKey && contract.asset.recipientPublicKey !== this.senderPublicKey) {
+        if (contract.asset.senderPublicKey !== this.senderPublicKey &&
+            contract.asset.recipientPublicKey !== this.senderPublicKey) {
             errors.push(
                 new TransactionError(
                     'Sender is not participant in contract',
@@ -178,7 +229,6 @@ export class ReviewContract extends BaseTransaction {
                 },
             });
         } else if (!this.asset.accept) {
-
             if (contract.asset.rev === 10) {
                 errors.push(
                     new TransactionError(
@@ -191,11 +241,26 @@ export class ReviewContract extends BaseTransaction {
                 );
             }
 
+            if (contract.asset.type && contract.asset.type === PAYMENT_TYPE) {
+                _.map(this.asset.unitOld, (value, key) => {
+                    if (contract.asset.unit[key] !== value) {
+                        errors.push(
+                            new TransactionError(
+                                `'.asset.unitOld.${key}' is not the right value`,
+                                this.id,
+                                `.asset.unitOld.${key}`,
+                                value,
+                                contract.asset.unit[key],
+                            ),
+                        );
+                    }
+                });
+            }
+
             store.account.set(contract.address, {
                 ...contract,
                 asset: {
                     ...contract.asset,
-                    type: PAYMENT_TYPE,
                     state: contract.asset.senderPublicKey === this.senderPublicKey ? STATES.RECIPIENT_REVIEW : STATES.SENDER_REVIEW,
                     rev: contract.asset.rev + 1,
                     unit: {
@@ -220,11 +285,18 @@ export class ReviewContract extends BaseTransaction {
                 },
             });
         } else if (!this.asset.accept) {
-            // todo reverse revision
             const updatedContract = {
                 ...contract,
-                asset: {},
-            };
+                asset: {
+                    ...contract.asset,
+                    rev: contract.asset.rev - 1,
+                    state: contract.asset.senderPublicKey === this.senderPublicKey ? STATES.SENDER_REVIEW : STATES.RECIPIENT_REVIEW,
+                    unit: {
+                        ...contract.asset.unit,
+                        ...this.asset.unitOld,
+                    }
+                },
+            } as Account;
             store.account.set(updatedContract.address, updatedContract);
         }
         return [];

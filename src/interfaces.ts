@@ -6,13 +6,15 @@ export interface ContractInterface extends Account{
 
 export interface ContractAsset {
     readonly type: string;
+    readonly title: string;
     readonly state: string;
     readonly unit: UnitAsset;
     readonly recipientPublicKey: string;
     readonly senderPublicKey: string;
     readonly rev: number;
-    readonly start?: number;
+    readonly start?: number; // todo functional for requests and activate when funded prepaid/1 unit
     readonly payments: number;
+    readonly lastBalance: string;
 }
 
 export interface TransactionJSON {
@@ -40,6 +42,7 @@ export interface UnitAsset {
 
 export interface CreateAssetJSON {
     readonly contractPublicKey?: string;
+    readonly title: string;
     readonly unit: UnitAsset;
     readonly recipientPublicKey: string;
     readonly senderPublicKey: string;
@@ -51,6 +54,13 @@ export interface ReviewAssetJSON {
     readonly contractPublicKey: string;
     readonly accept: boolean;
     readonly unit?: Partial<UnitAsset>;
+    readonly unitOld?: Partial<UnitAsset>;
+    readonly data?: string;
+}
+
+export interface FundAssetJSON {
+    readonly contractPublicKey: string;
+    readonly units: number;
     readonly data?: string;
 }
 
@@ -62,6 +72,7 @@ export interface RequestAssetJSON {
 
 export interface TerminateAssetJSON {
     readonly contractPublicKey: string;
+    readonly peerPublicKey: string;
     readonly data?: string;
 }
 
@@ -75,6 +86,10 @@ export interface ReviewTransactionJSON extends TransactionJSON{
 
 export interface RequestTransactionJSON extends TransactionJSON{
     readonly asset: RequestAssetJSON;
+}
+
+export interface FundTransactionJSON extends TransactionJSON{
+    readonly asset: FundAssetJSON;
 }
 
 export interface TerminateTransactionJSON extends TransactionJSON{

@@ -7,31 +7,33 @@ import {
     TransactionError,
     convertToAssetError,
 } from '@liskhq/lisk-transactions';
-import {PAYMENT_TYPE, STATES} from '../constants';
-import {RequestPaymentAssetSchema} from '../schemas';
-import {RequestTransactionJSON, RequestAssetJSON, ContractInterface} from '../interfaces';
+import { PAYMENT_TYPE, STATES} from '../constants';
+import {FundAssetSchema} from '../schemas';
+import {FundAssetJSON, FundTransactionJSON, ContractInterface} from '../interfaces';
 import {getContractAddress} from "../utils";
 
-export class RequestPayment extends BaseTransaction {
-    readonly asset = {} as RequestAssetJSON;
-    public readonly TYPE = 125;
+export class Faucet extends BaseTransaction {
+    readonly asset: FundAssetJSON;
+    public readonly TYPE = 127;
 
     public constructor(rawTransaction: unknown) {
         super(rawTransaction);
         const tx = (typeof rawTransaction === 'object' && rawTransaction !== null
             ? rawTransaction
-            : {}) as Partial<RequestTransactionJSON>;
+            : {}) as Partial<FundTransactionJSON>;
 
         if (tx.asset) {
             this.asset = {
                 ...tx.asset,
-            } as RequestAssetJSON;
+            } as FundAssetJSON;
+        } else {
+            this.asset = {} as FundAssetJSON;
         }
     }
 
     protected assetToBytes(): Buffer {
-        const unitBuffer = intToBuffer(
-            this.asset.unit, 2
+        const unitsBuffer = intToBuffer(
+            this.asset.units, 2
         );
 
         const contractPublicKeyBuffer = this.asset.contractPublicKey
@@ -44,7 +46,7 @@ export class RequestPayment extends BaseTransaction {
 
         return Buffer.concat([
             contractPublicKeyBuffer,
-            unitBuffer,
+            unitsBuffer,
             dataBuffer,
         ]);
     }
@@ -68,7 +70,7 @@ export class RequestPayment extends BaseTransaction {
 
     protected validateAsset(): ReadonlyArray<TransactionError> {
         const asset = this.assetToJSON();
-        const schemaErrors = validator.validate(RequestPaymentAssetSchema, asset);
+        const schemaErrors = validator.validate(FundAssetSchema, asset);
         return convertToAssetError(
             this.id,
             schemaErrors,
@@ -79,6 +81,7 @@ export class RequestPayment extends BaseTransaction {
         const errors: TransactionError[] = [];
         const sender = await store.account.getOrDefault(this.senderId);
         const contract = await store.account.getOrDefault(getContractAddress(this.asset.contractPublicKey)) as ContractInterface;
+
         if (contract.asset.type !== PAYMENT_TYPE) {
             errors.push(
                 new TransactionError(
@@ -89,70 +92,80 @@ export class RequestPayment extends BaseTransaction {
                 ),
             );
         } else {
-            if (contract.asset.recipientPublicKey !== this.senderPublicKey) {
+
+            if (contract.asset.senderPublicKey !== this.senderPublicKey) {
                 errors.push(
                     new TransactionError(
-                        'Sender is not recipient in this contract',
+                        'Sender is not sender in this contract',
                         this.id,
                         '.senderPublicKey',
                         this.senderPublicKey,
-                        contract.asset.recipientPublicKey
+                        contract.asset.senderPublicKey
                     ),
                 );
             }
 
-            if (contract.asset.state !== STATES.ACTIVE) {
+            if (contract.asset.state !== STATES.ACTIVE && contract.asset.state !== STATES.ACCEPTED) {
                 errors.push(
                     new TransactionError(
-                        'Recurring payment contract is not active',
+                        'Recurring payment contract is not accepted nor active',
                         this.id,
                         '.state',
                         contract.asset.state,
-                        STATES.ACTIVE
+                        `${STATES.ACTIVE} | ${STATES.ACCEPTED}`
                     ),
                 );
             }
 
-            // todo calculate time lock error
-
-            if (contract.asset.payments + 1 !== this.asset.unit) {
+            if (contract.asset.state === STATES.ACCEPTED && contract.asset.unit.prepaid > 0 && this.asset.units < contract.asset.unit.prepaid) {
                 errors.push(
                     new TransactionError(
-                        'Wrong `.asset.unit` number given',
+                        'There is a prepaid minimum',
                         this.id,
-                        '.asset.unit',
-                        this.asset.unit,
-                        contract.asset.payments + 1
+                        '.asset.units',
+                        this.asset.units,
+                        `> ${contract.asset.unit.prepaid}`
                     ),
                 );
             }
 
-            if (contract.balance < BigInt(contract.asset.unit.amount)) {
+            if (contract.asset.unit.total - contract.asset.payments < this.asset.units) {
                 errors.push(
                     new TransactionError(
-                        'Contract balance is too low',
+                        'Too many `.asset.units` for this contract',
+                        this.id,
+                        '.asset.units',
+                        this.asset.units,
+                        `< ${contract.asset.unit.total - contract.asset.payments}`
+                    ),
+                );
+            }
+
+            if (sender.balance < (BigInt(contract.asset.unit.amount) * BigInt(this.asset.units))) {
+                errors.push(
+                    new TransactionError(
+                        'Senders balance is too low',
                         this.id,
                         '.balance',
-                        contract.balance.toString(),
-                        `> ${contract.asset.unit.amount}`
+                        sender.balance.toString(),
+                        `>= ${(BigInt(contract.asset.unit.amount) * BigInt(this.asset.units)).toString()}`
                     ),
                 );
             }
 
-            contract.balance -= BigInt(contract.asset.unit.amount);
-            sender.balance += BigInt(contract.asset.unit.amount);
-
+            contract.balance += BigInt(contract.asset.unit.amount) * BigInt(this.asset.units);
             const updatedContract: ContractInterface = {
                 ...contract,
                 asset: {
                     ...contract.asset,
-                    state: contract.asset.payments + 1 < contract.asset.unit.total ? STATES.ACTIVE : STATES.ENDED,
-                    payments: contract.asset.payments + 1,
+                    state: STATES.ACTIVE,
+                    start: contract.asset.state === STATES.ACCEPTED ? store.chain.lastBlockHeader.timestamp : contract.asset.start,
                 },
             };
             store.account.set(updatedContract.address, updatedContract);
-            store.account.set(this.senderId, sender);
 
+            sender.balance -= BigInt(contract.asset.unit.amount) * BigInt(this.asset.units);
+            store.account.set(this.senderId, sender);
         }
         return errors;
     }
@@ -160,19 +173,18 @@ export class RequestPayment extends BaseTransaction {
     protected async undoAsset(store: StateStore): Promise<ReadonlyArray<TransactionError>> {
         const sender = await store.account.get(this.senderId);
         const contract = await store.account.getOrDefault(getContractAddress(this.asset.contractPublicKey)) as ContractInterface;
-        contract.balance += BigInt(contract.asset.unit.amount);
+        contract.balance -= BigInt(contract.asset.unit.amount) * BigInt(this.asset.units);
 
         const updatedContract = {
             ...contract,
             asset: {
                 ...contract.asset,
-                state: STATES.ACTIVE,
-                payments: contract.asset.payments - 1,
+                state: contract.balance > BigInt(contract.asset.unit.prepaid || 1) * BigInt(contract.asset.unit.amount) || contract.asset.payments > 0 ? STATES.ACTIVE : STATES.ACCEPTED,
             },
         };
         store.account.set(updatedContract.address, updatedContract);
 
-        sender.balance -= BigInt(contract.asset.unit.amount);
+        sender.balance += BigInt(contract.asset.unit.amount) * BigInt(this.asset.units);
         store.account.set(this.senderId, sender);
         return [];
     }

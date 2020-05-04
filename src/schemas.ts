@@ -1,11 +1,16 @@
 
 export const CreateContractAssetSchema = {
     type: 'object',
-    required: ['unit', 'recipientPublicKey', 'senderPublicKey', 'timestamp'],
+    required: ['unit', 'title', 'recipientPublicKey', 'senderPublicKey', 'timestamp'],
     properties: {
         contractPublicKey: {
             type: 'string',
             format: 'publicKey',
+        },
+        title: {
+            type: 'string',
+            pattern: '[a-zA-Z0-9_-]{3,20}',
+            maxLength: 20,
         },
         unit: {
             type: 'object',
@@ -68,16 +73,41 @@ export const ReviewContractAssetSchema = {
         accept: {
             type: 'boolean',
         },
-        revision: {
-            type: 'integer',
-            minimum: 1,
-        },
         unit: {
             type: 'object',
             properties: {
                 type: {
                     type: 'string',
-                    enum: ['minutes', 'hours', 'days', 'months', 'years'],
+                    enum: ['MINUTES', 'HOURS', 'DAYS', 'MONTHS', 'YEARS'],
+                },
+                typeAmount: {
+                    type: 'integer',
+                    minimum: 1,
+                },
+                amount: {
+                    type: 'string',
+                    format: 'int64',
+                },
+                prepaid: {
+                    type: 'integer',
+                    minimum: 1,
+                },
+                total: {
+                    type: 'integer',
+                    minimum: 0,
+                },
+                terminateFee: {
+                    type: 'integer',
+                    minimum: 0,
+                },
+            },
+        },
+        unitOld: {
+            type: 'object',
+            properties: {
+                type: {
+                    type: 'string',
+                    enum: ['MINUTES', 'HOURS', 'DAYS', 'MONTHS', 'YEARS'],
                 },
                 typeAmount: {
                     type: 'integer',
@@ -129,12 +159,35 @@ export const RequestPaymentAssetSchema = {
     },
 };
 
+export const FundAssetSchema = {
+    type: 'object',
+    required: ['contractPublicKey', 'units'],
+    properties: {
+        contractPublicKey: {
+            type: 'string',
+            format: 'publicKey',
+        },
+        units: {
+            type: 'integer',
+            minimum: 1,
+        },
+        data: {
+            type: 'string',
+            format: 'transferData',
+            maxLength: 64,
+        },
+    },
+};
 
 export const TerminateContractAssetSchema = {
     type: 'object',
-    required: ['contractPublicKey'],
+    required: ['contractPublicKey', 'peerPublicKey'],
     properties: {
         contractPublicKey: {
+            type: 'string',
+            format: 'publicKey',
+        },
+        peerPublicKey: {
             type: 'string',
             format: 'publicKey',
         },

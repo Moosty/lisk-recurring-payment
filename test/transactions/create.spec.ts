@@ -98,7 +98,7 @@ describe('Test Create Transaction', () => {
                         timestamp: 6563444,
                     },
                 });
-            expect(validTestTransactionTime.getContractPublicKey()).toEqual("db3cc5c55b16a47a001f98c8ff83f3e6b52faca12611de452c4a0ed07f5ac34c");
+            expect(validTestTransactionTime.getContractPublicKey()).toEqual("201ad33b507d34bf29e4d0ac4a32773b447869e7ff33fbbd12f88e722bb3fd96");
         });
     });
 

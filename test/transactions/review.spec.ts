@@ -1,27 +1,30 @@
 import {Account, TransactionError} from '@liskhq/lisk-transactions/dist-node';
 import {
-    CreateContract,
+    ReviewContract,
 } from '../../src/transactions';
 import {
-    CreateContractTransaction,
+    ReviewContractTransaction,
 } from '../../src';
 import {
     transactions,
     accounts,
 } from '../fixtures';
 import {defaultAccount, defaultNetworkIdentifier, StateStoreMock} from '../helpers/state_store';
-import {CreateAssetJSON} from '../../src/interfaces';
+import {ReviewAssetJSON} from '../../src/interfaces';
+import {getContractAddress} from '../../src/utils';
+import {PAYMENT_TYPE} from "../../src/constants";
 
-describe('Test Create Transaction', () => {
-    const validCreateTransaction = transactions.validCreateTransaction.input as Partial<CreateAssetJSON>;
-    let validTestTransaction: CreateContract;
+describe('Test Review Transaction', () => {
+    const validReviewTransaction = transactions.validReviewTransaction.input as Partial<ReviewAssetJSON>;
+    let validTestTransaction: ReviewContract;
     let sender: Account;
     let recipient: Account;
+    let contract: Account;
     let store: StateStoreMock;
 
     beforeEach(() => {
-        validTestTransaction = new CreateContractTransaction(
-            validCreateTransaction,
+        validTestTransaction = new ReviewContractTransaction(
+            validReviewTransaction,
         );
         sender = {
             ...defaultAccount,
@@ -35,7 +38,28 @@ describe('Test Create Transaction', () => {
             address: accounts.secondAccount.senderId,
         };
 
-        store = new StateStoreMock([sender, recipient]);
+        contract = {
+            ...defaultAccount,
+            address: "15435023355030673670L",
+            asset: {
+                type: PAYMENT_TYPE,
+                state: "",
+                unit: {
+                    type: "HOURS",
+                    typeAmount: 1,
+                    amount: "100000000",
+                    prepaid: 1,
+                    total: 12,
+                    terminateFee: 0,
+                },
+                recipientPublicKey: "",
+                senderPublicKey: "",
+                rev: 0,
+                payments: 0,
+            }
+        }
+
+        store = new StateStoreMock([sender, recipient, contract]);
 
         jest.spyOn(store.account, 'cache');
         jest.spyOn(store.account, 'get');
@@ -44,133 +68,137 @@ describe('Test Create Transaction', () => {
     });
 
     describe('#constructor', () => {
-        it('should create instance of CreateContract', async () => {
-            expect(validTestTransaction).toBeInstanceOf(CreateContract);
+        it('should create instance of ReviewContract', async () => {
+            expect(validTestTransaction).toBeInstanceOf(ReviewContract);
         });
 
         it('should set asset data', async () => {
             expect(validTestTransaction.asset.data).toEqual(
-                transactions.validCreateTransaction.input.asset.data,
+                transactions.validReviewTransaction.input.asset.data,
             );
         });
 
         it('should set asset contractPublicKey', async () => {
             expect(validTestTransaction.asset).toEqual(
-                transactions.validCreateTransaction.input.asset,
+                transactions.validReviewTransaction.input.asset,
             );
         });
 
-        it('should set asset recipientPublicKey', async () => {
-            expect(validTestTransaction.asset.recipientPublicKey).toEqual(
-                transactions.validCreateTransaction.input.asset.recipientPublicKey,
+        it('should set asset unitOld', async () => {
+            expect(validTestTransaction.asset.unitOld).toEqual(
+                transactions.validReviewTransaction.input.asset.unitOld,
             );
         });
 
-        it('should set asset senderPublicKey', async () => {
-            expect(validTestTransaction.asset.senderPublicKey).toEqual(
-                transactions.validCreateTransaction.input.asset.senderPublicKey,
+        it('should set asset unit', async () => {
+            expect(validTestTransaction.asset.unit).toEqual(
+                transactions.validReviewTransaction.input.asset.unit,
             );
         });
     });
 
     describe('#assetToJSON', () => {
-        it('should return an object of type create asset', async () => {
+        it('should return an object of type review asset', async () => {
             const assetJson = validTestTransaction.assetToJSON() as any;
-            expect(assetJson).toEqual(transactions.validCreateTransaction.input.asset);
-        });
-    });
-
-    describe('#getContractId', () => {
-        it('should return contractPublicKey', async () => {
-            expect(validTestTransaction.getContractPublicKey()).toEqual(transactions.validCreateTransaction.contractPublicKey);
-        });
-
-        it('should return contractId', async () => {
-            expect(validTestTransaction.getContractId()).toEqual(transactions.validCreateTransaction.contractId);
-        });
-
-        it('should return contractPublicKey', async () => {
-            let validTestTransactionTime = new CreateContractTransaction(
-                {
-                    ...validCreateTransaction,
-                    asset: {
-                        ...validTestTransaction.asset,
-                        timestamp: 6563444,
-                    },
-                });
-            expect(validTestTransactionTime.getContractPublicKey()).toEqual("db3cc5c55b16a47a001f98c8ff83f3e6b52faca12611de452c4a0ed07f5ac34c");
+            expect(assetJson).toEqual(transactions.validReviewTransaction.input.asset);
         });
     });
 
     describe('#validateAssets', () => {
+
         it('should return no errors', async () => {
-            validTestTransaction.sign(defaultNetworkIdentifier, transactions.validCreateTransaction.passphrase);
+            validTestTransaction = new ReviewContractTransaction(
+                {
+                    ...validReviewTransaction,
+                    asset: {
+                        ...validTestTransaction.asset,
+                        accept: false
+                    },
+                }
+            );
             const errors = (validTestTransaction as any).validateAsset();
             expect(errors.length).toEqual(0);
         });
 
-        it('should return senderPublicKey error', async () => {
+        it('should return accept error', async () => {
+            const errors = (validTestTransaction as any).validateAsset();
+            expect(errors.length).toEqual(1);
+            expect(errors[0].message).toEqual("'.asset' should have required property 'accept'");
+        });
+
+        it('should return no units allowed error', async () => {
+            validTestTransaction = new ReviewContractTransaction(
+                {
+                    ...validReviewTransaction,
+                    asset: {
+                        ...validTestTransaction.asset,
+                        accept: true
+                    },
+                }
+            );
             const errors = (validTestTransaction as any).validateAsset();
             expect(errors.length).toEqual(1);
             expect(errors[0]).toBeInstanceOf(TransactionError);
             expect(errors[0].message).toContain(
-                '`.asset.recipientPublicKey` or `.asset.senderPublicKey` should be the same as `senderPublicKey`.',
+                'When `.asset.accept === true`, `.asset.unit` and `.asset.unitOld` are not allowed.',
             );
         });
 
-        it('should return contractPublicKey error', async () => {
-            const wrongContractPublicKeyTransaction = new CreateContractTransaction(
+        it('should return no errors', async () => {
+            validTestTransaction = new ReviewContractTransaction(
                 {
-                    ...validCreateTransaction,
+                    ...validReviewTransaction,
                     asset: {
                         ...validTestTransaction.asset,
-                        contractPublicKey: "AA",
+                        accept: false,
+                        unit: {
+                            amount: "30",
+                            type: "YEARS",
+                        },
+                        unitOld: {
+                            type: "MONTHS"
+                        }
                     },
-                });
-            wrongContractPublicKeyTransaction.sign(defaultNetworkIdentifier, transactions.validCreateTransaction.passphrase);
-
-            const errors = (wrongContractPublicKeyTransaction as any).validateAsset();
-            expect(errors.length).toEqual(2);
+                }
+            );
+            const errors = (validTestTransaction as any).validateAsset();
+            expect(errors.length).toEqual(1);
             expect(errors[0]).toBeInstanceOf(TransactionError);
             expect(errors[0].message).toContain(
-                `'.contractPublicKey' should match format "publicKey"`,
-            );
-            expect(errors[1]).toBeInstanceOf(TransactionError);
-            expect(errors[1].message).toContain(
-                '`.asset.contractPublicKey` should be different.',
+                '`.asset.unit` and `.asset.unitOld` should have the same keys.',
             );
         });
+
     });
 
     describe('#prepare', () => {
         it('should call state store', async () => {
-            validTestTransaction.sign(defaultNetworkIdentifier, transactions.validCreateTransaction.passphrase);
+            validTestTransaction.sign(defaultNetworkIdentifier, transactions.validReviewTransaction.passphrase);
             await validTestTransaction.prepare(store);
             expect(store.account.cache).toHaveBeenCalledWith([
-                { address: transactions.validCreateTransaction.senderId },
-                { address: validTestTransaction.getContractId() },
+                {address: transactions.validReviewTransaction.senderId},
+                {address: getContractAddress(transactions.validReviewTransaction.input.asset.contractPublicKey)},
             ]);
         });
     });
 
     describe('#applyAsset', () => {
         it('should return no errors', async () => {
-            validTestTransaction.sign(defaultNetworkIdentifier, transactions.validCreateTransaction.passphrase);
+            validTestTransaction.sign(defaultNetworkIdentifier, transactions.validReviewTransaction.passphrase);
             const errors = (validTestTransaction as any).applyAsset(store);
             expect(Object.keys(errors)).toHaveLength(0);
         });
 
         it('should call state store', async () => {
-            validTestTransaction.sign(defaultNetworkIdentifier, transactions.validCreateTransaction.passphrase);
+            validTestTransaction.sign(defaultNetworkIdentifier, transactions.validReviewTransaction.passphrase);
             await (validTestTransaction as any).applyAsset(store);
             expect(store.account.getOrDefault).toHaveBeenCalledWith(
-                transactions.validCreateTransaction.contractId,
+                transactions.validReviewTransaction.contractId,
             );
             expect(store.account.set).toHaveBeenCalledWith(
-                transactions.validCreateTransaction.contractId,
+                transactions.validReviewTransaction.contractId,
                 expect.objectContaining({
-                    address: transactions.validCreateTransaction.contractId,
-                    publicKey: validTestTransaction.getContractPublicKey(),
+                    address: transactions.validReviewTransaction.contractId,
                 }),
             );
 
@@ -179,19 +207,43 @@ describe('Test Create Transaction', () => {
 
     describe('#undoAsset', () => {
         it('should call state store', async () => {
-            validTestTransaction.sign(defaultNetworkIdentifier, transactions.validCreateTransaction.passphrase);
+            validTestTransaction = new ReviewContractTransaction(
+                {
+                    ...validReviewTransaction,
+                    asset: {
+                        ...validTestTransaction.asset,
+                        accept: false
+                    },
+                }
+            );
+            validTestTransaction.sign(defaultNetworkIdentifier, transactions.validReviewTransaction.passphrase);
             await (validTestTransaction as any).undoAsset(store);
             expect(store.account.getOrDefault).toHaveBeenCalledWith(
-                validTestTransaction.getContractId(),
-            );
-
+                "15435023355030673670L");
             expect(store.account.set).toHaveBeenCalledWith(
-                validTestTransaction.getContractId(),
+                "15435023355030673670L",
                 expect.objectContaining({
-                    address: validTestTransaction.getContractId(),
                     publicKey: undefined,
-                }),
-            );
+                }));
+            expect(store.accountData[2]).toMatchObject({
+                publicKey: undefined,
+                asset: {
+                    type: 'RECURRING_PAYMENT_CONTRACT',
+                    state: 'RECIPIENT_REVIEW',
+                    unit: {
+                        type: "MINUTES",
+                        typeAmount: 1,
+                        amount: "100000",
+                        prepaid: 10,
+                        total: 100,
+                        terminateFee: 5,
+                    },
+                    recipientPublicKey: '',
+                    senderPublicKey: '',
+                    rev: -1,
+                    payments: 0
+                }
+            });
         });
     });
 });

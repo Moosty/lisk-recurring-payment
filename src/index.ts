@@ -3,6 +3,7 @@ import {
     ReviewContract as ReviewContractUnConfiguredTransaction,
     RequestPayment as RequestPaymentUnConfiguredTransaction,
     TerminateContract as TerminateContractUnConfiguredTransaction,
+    FundContract as FundContractUnConfiguredTransaction,
 } from './transactions';
 import * as utils  from './utils';
 
@@ -37,19 +38,30 @@ const configureTerminateTransaction = (): any => {
     }
 };
 
+const configureFundTransaction = (): any => {
+    return class FundContractTransaction extends FundContractUnConfiguredTransaction {
+        constructor(props) {
+            super(props);
+        }
+    }
+};
+
 const CreateContractTransaction = configureCreateTransaction();
 const ReviewContractTransaction = configureReviewTransaction();
 const RequestPaymentTransaction = configureRequestTransaction();
 const TerminateContractTransaction = configureTerminateTransaction();
+const FundContractTransaction = configureFundTransaction();
 
 export {
     CreateContractTransaction,
     ReviewContractTransaction,
     RequestPaymentTransaction,
     TerminateContractTransaction,
+    FundContractTransaction,
     configureCreateTransaction as UnConfiguredCreateTransaction,
     configureReviewTransaction as UnConfiguredReviewTransaction,
     configureRequestTransaction as UnConfiguredRequestTransaction,
     configureTerminateTransaction as UnConfiguredTerminateTransaction,
+    configureFundTransaction as UnConfiguredFundTransaction,
     utils,
 };

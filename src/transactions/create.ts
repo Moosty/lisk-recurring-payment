@@ -72,6 +72,10 @@ export class CreateContract extends BaseTransaction {
             this.asset.unit.terminateFee, 2
         );
 
+        const titleBuffer = this.asset.title
+            ? stringToBuffer(this.asset.title)
+            : Buffer.alloc(0);
+
         const recipientPublicKeyBuffer = this.asset.recipientPublicKey
             ? stringToBuffer(this.asset.recipientPublicKey)
             : Buffer.alloc(0);
@@ -87,6 +91,7 @@ export class CreateContract extends BaseTransaction {
         return Buffer.concat([
             recipientPublicKeyBuffer,
             senderPublicKeyBuffer,
+            titleBuffer,
             typeBuffer,
             typeAmountBuffer,
             unitAmount,
@@ -182,6 +187,9 @@ export class CreateContract extends BaseTransaction {
                 recipientPublicKey: this.asset.recipientPublicKey,
                 senderPublicKey: this.asset.senderPublicKey,
                 payments: 0,
+                lastBalance: 0,
+                start: 0,
+                title: this.asset.title,
             },
         };
 

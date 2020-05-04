@@ -4,10 +4,12 @@ import {
     UnConfiguredRequestTransaction,
     UnConfiguredReviewTransaction,
     UnConfiguredTerminateTransaction,
+    UnConfiguredFundTransaction,
     CreateContractTransaction,
     ReviewContractTransaction,
     RequestPaymentTransaction,
     TerminateContractTransaction,
+    FundContractTransaction,
 } from "../src";
 
 describe('Test index', () => {
@@ -28,6 +30,10 @@ describe('Test index', () => {
         return expect(UnConfiguredTerminateTransaction).toBeFunction();
     });
 
+    it('should return UnConfiguredFundTransaction', () => {
+        return expect(UnConfiguredFundTransaction).toBeFunction();
+    });
+
     it('should return CreateContractTransaction', () => {
         return expect(CreateContractTransaction).toBeFunction();
     });
@@ -42,6 +48,10 @@ describe('Test index', () => {
 
     it('should return TerminateContractTransaction', () => {
         return expect(TerminateContractTransaction).toBeFunction();
+    });
+
+    it('should return FundContractTransaction', () => {
+        return expect(FundContractTransaction).toBeFunction();
     });
 
 });
