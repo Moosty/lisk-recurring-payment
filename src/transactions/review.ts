@@ -168,9 +168,7 @@ export class ReviewContract extends BaseTransaction {
     protected async applyAsset(store: StateStore): Promise<ReadonlyArray<TransactionError>> {
         const errors: TransactionError[] = [];
         const contract = await store.account.getOrDefault(getContractAddress(this.asset.contractPublicKey)) as ContractInterface;
-        // todo check if right sender does the action
-
-        if (contract.asset && contract.asset.type !== PAYMENT_TYPE) {
+        if (contract.asset.type !== PAYMENT_TYPE) {
             errors.push(
                 new TransactionError(
                     '`contractPublicKey` not a recurring payment contract.',
@@ -179,96 +177,85 @@ export class ReviewContract extends BaseTransaction {
                     this.asset.contractPublicKey,
                 ),
             );
-        }
+        } else {
 
-        if (contract.asset.senderPublicKey !== this.senderPublicKey &&
-            contract.asset.recipientPublicKey !== this.senderPublicKey) {
-            errors.push(
-                new TransactionError(
-                    'Sender is not participant in contract',
-                    this.id,
-                    '.senderPublicKey',
-                    this.senderPublicKey,
-                    `${contract.asset.recipientPublicKey} | ${contract.asset.senderPublicKey}`
-                ),
-            );
-        }
-
-        if (contract.asset.state !== STATES.SENDER_REVIEW && contract.asset.state !== STATES.RECIPIENT_REVIEW) {
-            errors.push(
-                new TransactionError(
-                    'Contract is not in review state.',
-                    this.id,
-                    '.asset.contractPublicKey',
-                    this.asset.contractPublicKey,
-                ),
-            );
-        }
-
-        if ((contract.asset.state === STATES.SENDER_REVIEW &&
-                contract.asset.recipientPublicKey === this.senderPublicKey) ||
-            (contract.asset.state === STATES.RECIPIENT_REVIEW &&
-                contract.asset.senderPublicKey === this.senderPublicKey)) {
-            errors.push(
-                new TransactionError(
-                    'The other party needs to review the contract',
-                    this.id,
-                    '.asset.contractPublicKey',
-                    this.asset.contractPublicKey,
-                ),
-            );
-        }
-
-        if (this.asset.accept) {
-            store.account.set(contract.address, {
-                ...contract,
-                asset: {
-                    ...contract.asset,
-                    state: STATES.ACCEPTED,
-                    start: store.chain.lastBlockHeader.timestamp
-                },
-            });
-        } else if (!this.asset.accept) {
-            if (contract.asset.rev === 10) {
+            if (contract.asset.senderPublicKey !== this.senderPublicKey &&
+                contract.asset.recipientPublicKey !== this.senderPublicKey) {
                 errors.push(
                     new TransactionError(
-                        'To many revisions made create a new contract',
+                        'Sender is not participant in contract',
                         this.id,
-                        '.rev',
-                        contract.asset.rev,
-                        `< 10`
+                        '.senderPublicKey',
+                        this.senderPublicKey,
+                        `${contract.asset.recipientPublicKey} | ${contract.asset.senderPublicKey}`
                     ),
                 );
             }
 
-            if (contract.asset.type && contract.asset.type === PAYMENT_TYPE) {
-                _.map(this.asset.unitOld, (value, key) => {
-                    if (contract.asset.unit[key] !== value) {
-                        errors.push(
-                            new TransactionError(
-                                `'.asset.unitOld.${key}' is not the right value`,
-                                this.id,
-                                `.asset.unitOld.${key}`,
-                                value,
-                                contract.asset.unit[key],
-                            ),
-                        );
-                    }
-                });
+            if (contract.asset.state !== STATES.SENDER_REVIEW && contract.asset.state !== STATES.RECIPIENT_REVIEW) {
+                errors.push(
+                    new TransactionError(
+                        'Contract is not in review state.',
+                        this.id,
+                        '.asset.contractPublicKey',
+                        this.asset.contractPublicKey,
+                    ),
+                );
             }
 
-            store.account.set(contract.address, {
-                ...contract,
-                asset: {
-                    ...contract.asset,
-                    state: contract.asset.senderPublicKey === this.senderPublicKey ? STATES.RECIPIENT_REVIEW : STATES.SENDER_REVIEW,
-                    rev: contract.asset.rev + 1,
-                    unit: {
-                        ...contract.asset.unit,
-                        ...this.asset.unit,
+            if ((contract.asset.state === STATES.SENDER_REVIEW &&
+                contract.asset.recipientPublicKey === this.senderPublicKey) ||
+                (contract.asset.state === STATES.RECIPIENT_REVIEW &&
+                    contract.asset.senderPublicKey === this.senderPublicKey)) {
+                errors.push(
+                    new TransactionError(
+                        'The other party needs to review the contract',
+                        this.id,
+                        '.asset.contractPublicKey',
+                        this.asset.contractPublicKey,
+                    ),
+                );
+            }
+
+            if (this.asset.accept) {
+                store.account.set(contract.address, {
+                    ...contract,
+                    asset: {
+                        ...contract.asset,
+                        state: STATES.ACCEPTED,
+                        start: store.chain.lastBlockHeader.timestamp
                     },
-                },
-            });
+                });
+            } else if (!this.asset.accept) {
+                if (contract.asset.type && contract.asset.type === PAYMENT_TYPE) {
+                    _.map(this.asset.unitOld, (value, key) => {
+                        if (contract.asset.unit[key] !== value) {
+                            errors.push(
+                                new TransactionError(
+                                    `'.asset.unitOld.${key}' is not the right value`,
+                                    this.id,
+                                    `.asset.unitOld.${key}`,
+                                    value,
+                                    contract.asset.unit[key],
+                                ),
+                            );
+                        }
+                    });
+                }
+
+                store.account.set(contract.address, {
+                    ...contract,
+                    asset: {
+                        ...contract.asset,
+                        state: contract.asset.senderPublicKey === this.senderPublicKey ? STATES.RECIPIENT_REVIEW : STATES.SENDER_REVIEW,
+                        rev: contract.asset.rev + 1,
+                        unit: {
+                            ...contract.asset.unit,
+                            ...this.asset.unit,
+                        },
+                    },
+                });
+            }
         }
 
         return errors;

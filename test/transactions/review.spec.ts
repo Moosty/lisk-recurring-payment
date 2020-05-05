@@ -12,7 +12,7 @@ import {
 import {defaultAccount, defaultNetworkIdentifier, StateStoreMock} from '../helpers/state_store';
 import {ReviewAssetJSON} from '../../src/interfaces';
 import {getContractAddress} from '../../src/utils';
-import {PAYMENT_TYPE} from "../../src/constants";
+import {PAYMENT_TYPE, STATES} from "../../src/constants";
 
 describe('Test Review Transaction', () => {
     const validReviewTransaction = transactions.validReviewTransaction.input as Partial<ReviewAssetJSON>;
@@ -43,7 +43,7 @@ describe('Test Review Transaction', () => {
             address: "15435023355030673670L",
             asset: {
                 type: PAYMENT_TYPE,
-                state: "",
+                state: STATES.SENDER_REVIEW,
                 unit: {
                     type: "HOURS",
                     typeAmount: 1,
@@ -52,8 +52,8 @@ describe('Test Review Transaction', () => {
                     total: 12,
                     terminateFee: 0,
                 },
-                recipientPublicKey: "",
-                senderPublicKey: "",
+                recipientPublicKey: "5c554d43301786aec29a09b13b485176e81d1532347a351aeafe018c199fd7ca",
+                senderPublicKey: "bfdd0ed3914d6e1a3e9a039b6bdfda2b77f727cb708354c3d80d0ea945a8749a",
                 rev: 0,
                 payments: 0,
             }
@@ -70,6 +70,14 @@ describe('Test Review Transaction', () => {
     describe('#constructor', () => {
         it('should create instance of ReviewContract', async () => {
             expect(validTestTransaction).toBeInstanceOf(ReviewContract);
+        });
+
+        it('should create empty instance of CreateContract', async () => {
+            validTestTransaction = new ReviewContractTransaction({});
+            expect(validTestTransaction).toBeInstanceOf(ReviewContract);
+            expect(validTestTransaction.asset.unit).toEqual(
+                undefined,
+            );
         });
 
         it('should set asset data', async () => {
@@ -102,7 +110,41 @@ describe('Test Review Transaction', () => {
             const assetJson = validTestTransaction.assetToJSON() as any;
             expect(assetJson).toEqual(transactions.validReviewTransaction.input.asset);
         });
+
+        it('should return an accept object of type review asset', async () => {
+            validTestTransaction = new ReviewContractTransaction(
+                {
+                    ...validReviewTransaction,
+                    asset: {
+                        contractPublicKey: validTestTransaction.asset.contractPublicKey,
+                        accept: true
+                    },
+                }
+            );
+            const assetJson = validTestTransaction.assetToJSON() as any;
+            expect(assetJson).toEqual({
+                accept: true,
+                "contractPublicKey": "38a3ae5bef78e7923d7065eaae74727eb84fd5593c474d438271329b6a71f8c7"
+            });
+        });
     });
+
+    describe('#assetToBytes', () => {
+        it('should return an accept object of type review asset', async () => {
+            validTestTransaction = new ReviewContractTransaction(
+                {
+                    ...validReviewTransaction,
+                    asset: {
+                        contractPublicKey: validTestTransaction.asset.contractPublicKey,
+                        accept: true
+                    },
+                }
+            );
+            // @ts-ignore
+            const assetBytes = validTestTransaction.assetToBytes() as any;
+            expect(assetBytes.toString()).toEqual("38a3ae5bef78e7923d7065eaae74727eb84fd5593c474d438271329b6a71f8c7");
+        });
+    })
 
     describe('#validateAssets', () => {
 
@@ -169,6 +211,44 @@ describe('Test Review Transaction', () => {
             );
         });
 
+        it('should return missing unitOld asset error', async () => {
+            validTestTransaction = new ReviewContractTransaction(
+                {
+                    ...validReviewTransaction,
+                    asset: {
+                        contractPublicKey: validTestTransaction.asset.contractPublicKey,
+                        accept: false,
+                        unit: validTestTransaction.asset.unit,
+                    },
+                }
+            );
+            const errors = (validTestTransaction as any).validateAsset();
+            expect(errors.length).toEqual(1);
+            expect(errors[0]).toBeInstanceOf(TransactionError);
+            expect(errors[0].message).toContain(
+                'Missing `.asset.unitOld`.',
+            );
+        });
+
+        it('should return missing unitOld asset error', async () => {
+            validTestTransaction = new ReviewContractTransaction(
+                {
+                    ...validReviewTransaction,
+                    asset: {
+                        contractPublicKey: validTestTransaction.asset.contractPublicKey,
+                        accept: false,
+                        unitOld: validTestTransaction.asset.unitOld,
+                    },
+                }
+            );
+            const errors = (validTestTransaction as any).validateAsset();
+            expect(errors.length).toEqual(1);
+            expect(errors[0]).toBeInstanceOf(TransactionError);
+            expect(errors[0].message).toContain(
+                'Missing `.asset.unit`.',
+            );
+        });
+
     });
 
     describe('#prepare', () => {
@@ -187,6 +267,150 @@ describe('Test Review Transaction', () => {
             validTestTransaction.sign(defaultNetworkIdentifier, transactions.validReviewTransaction.passphrase);
             const errors = (validTestTransaction as any).applyAsset(store);
             expect(Object.keys(errors)).toHaveLength(0);
+        });
+
+        it('should return not a contract errors', async () => {
+            validTestTransaction = new ReviewContractTransaction(
+                {
+                    ...validReviewTransaction,
+                    asset: {
+                        ...validTestTransaction.asset,
+                        contractPublicKey: accounts.defaultAccount.senderPublicKey,
+                    },
+                }
+            );
+            validTestTransaction.sign(defaultNetworkIdentifier, transactions.validReviewTransaction.passphrase);
+            const errors = await (validTestTransaction as any).applyAsset(store);
+            expect(errors.length).toEqual(1);
+            expect(errors[0]).toBeInstanceOf(TransactionError);
+            expect(errors[0].message).toContain(
+                '`contractPublicKey` not a recurring payment contract.',
+            );
+        });
+
+        it('should return not a contract errors', async () => {
+            validTestTransaction = new ReviewContractTransaction(
+                {
+                    ...validReviewTransaction,
+                    asset: {
+                        ...validTestTransaction.asset,
+                        contractPublicKey: accounts.defaultAccount.senderPublicKey,
+                    },
+                }
+            );
+            validTestTransaction.sign(defaultNetworkIdentifier, transactions.validReviewTransaction.passphrase);
+            const errors = await (validTestTransaction as any).applyAsset(store);
+            expect(errors.length).toEqual(1);
+            expect(errors[0]).toBeInstanceOf(TransactionError);
+            expect(errors[0].message).toContain(
+                '`contractPublicKey` not a recurring payment contract.',
+            );
+        });
+        it('should return not return errors accept review', async () => {
+            validTestTransaction = new ReviewContractTransaction(
+                {
+                    ...validReviewTransaction,
+                    asset: {
+                        contractPublicKey: transactions.validReviewTransaction.input.asset.contractPublicKey,
+                        accept: true,
+                    },
+                }
+            );
+            validTestTransaction.sign(defaultNetworkIdentifier, transactions.validReviewTransaction.passphrase);
+            const errors = await (validTestTransaction as any).applyAsset(store);
+            expect(errors.length).toEqual(0);
+        });
+
+        it('should return wrong state error', async () => {
+            validTestTransaction = new ReviewContractTransaction(
+                {
+                    ...validReviewTransaction,
+                    asset: {
+                        contractPublicKey: transactions.validReviewTransaction.input.asset.contractPublicKey,
+                        accept: true,
+                    },
+                }
+            );
+            store = new StateStoreMock([sender, recipient, {
+                ...contract,
+                asset: {
+                    ...contract.asset,
+                    state: STATES.ACTIVE,
+                }
+            }]);
+            validTestTransaction.sign(defaultNetworkIdentifier, transactions.validRequestTransaction.passphrase);
+            const errors = await (validTestTransaction as any).applyAsset(store);
+            expect(errors.length).toEqual(1);
+            expect(errors[0]).toBeInstanceOf(TransactionError);
+            expect(errors[0].message).toContain(
+                'Contract is not in review state.',
+            );
+        });
+
+        it('should return wrong recipientId error', async () => {
+            validTestTransaction = new ReviewContractTransaction(
+                {
+                    ...validReviewTransaction,
+                    asset: {
+                        ...validTestTransaction.asset,
+                        unitOld: {
+                            // @ts-ignore
+                            ...contract.asset.unit,
+                        },
+                        unit: {
+                            // @ts-ignore
+                            ...contract.asset.unit,
+                        },
+                    },
+                }
+            );
+            store = new StateStoreMock([sender, recipient, {
+                ...contract,
+                asset: {
+                    ...contract.asset,
+                    state: STATES.SENDER_REVIEW,
+                }
+            }]);
+            validTestTransaction.sign(defaultNetworkIdentifier, transactions.validRequestTransaction.passphraseWrong);
+            const errors = await (validTestTransaction as any).applyAsset(store);
+            expect(errors.length).toEqual(1);
+            expect(errors[0]).toBeInstanceOf(TransactionError);
+            expect(errors[0].message).toContain(
+                'Sender is not participant in contract',
+            );
+        });
+
+        it('should return wrong reviewer errors', async () => {
+            validTestTransaction = new ReviewContractTransaction(
+                {
+                    ...validReviewTransaction,
+                    asset: {
+                        ...validTestTransaction.asset,
+                        unitOld: {
+                            // @ts-ignore
+                            ...contract.asset.unit,
+                        },
+                        unit: {
+                            // @ts-ignore
+                            ...contract.asset.unit,
+                        },
+                    },
+                }
+            );
+            store = new StateStoreMock([sender, recipient, {
+                ...contract,
+                asset: {
+                    ...contract.asset,
+                    state: STATES.SENDER_REVIEW,
+                }
+            }]);
+            validTestTransaction.sign(defaultNetworkIdentifier, transactions.validReviewTransaction.passphraseWrong);
+            const errors = await (validTestTransaction as any).applyAsset(store);
+            expect(errors.length).toEqual(1);
+            expect(errors[0]).toBeInstanceOf(TransactionError);
+            expect(errors[0].message).toContain(
+                'The other party needs to review the contract',
+            );
         });
 
         it('should call state store', async () => {
@@ -229,7 +453,7 @@ describe('Test Review Transaction', () => {
                 publicKey: undefined,
                 asset: {
                     type: 'RECURRING_PAYMENT_CONTRACT',
-                    state: 'RECIPIENT_REVIEW',
+                    state: 'SENDER_REVIEW',
                     unit: {
                         type: "MINUTES",
                         typeAmount: 1,
@@ -238,8 +462,8 @@ describe('Test Review Transaction', () => {
                         total: 100,
                         terminateFee: 5,
                     },
-                    recipientPublicKey: '',
-                    senderPublicKey: '',
+                    recipientPublicKey: '5c554d43301786aec29a09b13b485176e81d1532347a351aeafe018c199fd7ca',
+                    senderPublicKey: 'bfdd0ed3914d6e1a3e9a039b6bdfda2b77f727cb708354c3d80d0ea945a8749a',
                     rev: -1,
                     payments: 0
                 }

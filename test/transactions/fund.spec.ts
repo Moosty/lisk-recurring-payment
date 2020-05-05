@@ -94,6 +94,14 @@ describe('Test Fund Transaction', () => {
             expect(validTestTransaction).toBeInstanceOf(FundContract);
         });
 
+        it('should create empty instance of FundContract', async () => {
+            validTestTransaction = new FundContractTransaction({});
+            expect(validTestTransaction).toBeInstanceOf(FundContract);
+            expect(validTestTransaction.asset.units).toEqual(
+                undefined,
+            );
+        });
+
         it('should set asset data', async () => {
             expect(validTestTransaction.asset.data).toEqual(
                 transactions.validFundTransaction.input.asset.data,
@@ -206,6 +214,51 @@ describe('Test Fund Transaction', () => {
             expect(errors[0]).toBeInstanceOf(TransactionError);
             expect(errors[0].message).toContain(
                 'Too many `.asset.units` for this contract',
+            );
+        });
+
+        it('should return wrong prepaid amount error', async () => {
+            validTestTransaction = new FundContractTransaction(
+                {
+                    ...validFundTransaction,
+                    asset: {
+                        ...validTestTransaction.asset,
+                        units: 1
+                    },
+                }
+            );
+            contract = {
+                ...defaultAccount,
+                address: "15435023355030673670L",
+                balance: BigInt("0"),
+                asset: {
+                    type: PAYMENT_TYPE,
+                    state: STATES.ACCEPTED,
+                    title: 'testTitle',
+                    unit: {
+                        type: "HOURS",
+                        typeAmount: 1,
+                        amount: "100000000",
+                        prepaid: 10,
+                        total: 12,
+                        terminateFee: 0,
+                    },
+                    recipientPublicKey: "5c554d43301786aec29a09b13b485176e81d1532347a351aeafe018c199fd7ca",
+                    senderPublicKey: "bfdd0ed3914d6e1a3e9a039b6bdfda2b77f727cb708354c3d80d0ea945a8749a",
+                    rev: 0,
+                    payments: 0,
+                    lastBalance: '0',
+                    start: 0,
+                }
+            }
+
+            store = new StateStoreMock([sender, recipient, contract]);
+            validTestTransaction.sign(defaultNetworkIdentifier, transactions.validFundTransaction.passphrase);
+            const errors = await (validTestTransaction as any).applyAsset(store);
+            expect(errors.length).toEqual(1);
+            expect(errors[0]).toBeInstanceOf(TransactionError);
+            expect(errors[0].message).toContain(
+                'There is a prepaid minimum',
             );
         });
 

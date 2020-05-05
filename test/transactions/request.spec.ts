@@ -21,6 +21,7 @@ describe('Test Request Transaction', () => {
     let recipient: Account;
     let contract: ContractInterface;
     let store: StateStoreMock;
+    let defaultBlockHeader;
 
     beforeEach(() => {
         validTestTransaction = new RequestPaymentTransaction(
@@ -41,7 +42,7 @@ describe('Test Request Transaction', () => {
         contract = {
             ...defaultAccount,
             address: "15435023355030673670L",
-            balance: BigInt("100000000000"),
+            balance: BigInt("100000000000000"),
             asset: {
                 type: PAYMENT_TYPE,
                 state: STATES.ACTIVE,
@@ -59,10 +60,31 @@ describe('Test Request Transaction', () => {
                 rev: 0,
                 payments: 0,
                 lastBalance: '0',
+                start: 100
             }
         }
 
-        store = new StateStoreMock([sender, recipient, contract]);
+        defaultBlockHeader = {
+            lastBlockHeader: {
+                "version": 1,
+                "height": 123,
+                "timestamp": 4400,
+                "generatorPublicKey": "968ba2fa993ea9dc27ed740da0daf49eddd740dbd7cb1cb4fc5db3a20baf341b",
+                "payloadLength": 117,
+                "payloadHash": "4e4d91be041e09a2e54bb7dd38f1f2a02ee7432ec9f169ba63cd1f193a733dd2",
+                "blockSignature": "a3733254aad600fa787d6223002278c3400be5e8ed4763ae27f9a15b80e20c22ac9259dc926f4f4cabdf0e4f8cec49308fa8296d71c288f56b9d1e11dfe81e07",
+                "previousBlockId": "15918760246746894806",
+                "numberOfTransactions": 15,
+                "totalAmount": BigInt("150000000"),
+                "totalFee": BigInt("15000000"),
+                "reward": BigInt("50000000"),
+                "maxHeightPreviouslyForged": 122,
+                "maxHeightPrevoted": 122,
+                "seedReveal": ""
+            }
+        };
+
+        store = new StateStoreMock([sender, recipient, contract], defaultBlockHeader);
 
         jest.spyOn(store.account, 'cache');
         jest.spyOn(store.account, 'get');
@@ -195,9 +217,37 @@ describe('Test Request Transaction', () => {
             );
         });
 
+        it('should return wrong time error', async () => {
+            validTestTransaction = new RequestPaymentTransaction(
+                {
+                    ...validRequestTransaction,
+                    asset: {
+                        ...validTestTransaction.asset,
+                        unit: 1
+                    },
+                }
+            );
+
+            store = new StateStoreMock([sender, recipient, contract], {
+                ...defaultBlockHeader,
+                lastBlockHeader: {
+                    ...defaultBlockHeader.lastBlockHeader,
+                    timestamp: 230,
+                }
+            });
+
+            validTestTransaction.sign(defaultNetworkIdentifier, transactions.validRequestTransaction.passphrase);
+            const errors = await (validTestTransaction as any).applyAsset(store);
+            expect(errors.length).toEqual(1);
+            expect(errors[0]).toBeInstanceOf(TransactionError);
+            expect(errors[0].message).toContain(
+                'No unlocked tokens available',
+            );
+        });
+
         it('should return low balance error', async () => {
             contract.balance = BigInt(0);
-            store = new StateStoreMock([sender, recipient, contract]);
+            store = new StateStoreMock([sender, recipient, contract], defaultBlockHeader);
 
             validTestTransaction.sign(defaultNetworkIdentifier, transactions.validRequestTransaction.passphrase);
             const errors = await (validTestTransaction as any).applyAsset(store);
@@ -216,7 +266,7 @@ describe('Test Request Transaction', () => {
                     state: STATES.ACCEPTED,
                 }
             }
-            store = new StateStoreMock([sender, recipient, contract]);
+            store = new StateStoreMock([sender, recipient, contract], defaultBlockHeader);
 
             validTestTransaction.sign(defaultNetworkIdentifier, transactions.validRequestTransaction.passphrase);
             const errors = await (validTestTransaction as any).applyAsset(store);
@@ -259,6 +309,18 @@ describe('Test Request Transaction', () => {
 
     describe('#undoAsset', () => {
         it('should call state store', async () => {
+            contract = {
+                ...contract,
+                asset: {
+                    ...contract.asset,
+                    payments: 1,
+                }
+            }
+            store = new StateStoreMock([sender, recipient, contract], defaultBlockHeader);
+            jest.spyOn(store.account, 'cache');
+            jest.spyOn(store.account, 'get');
+            jest.spyOn(store.account, 'getOrDefault');
+            jest.spyOn(store.account, 'set');
             validTestTransaction = new RequestPaymentTransaction(
                 {
                     ...validRequestTransaction,
@@ -283,7 +345,7 @@ describe('Test Request Transaction', () => {
                     address: transactions.validRequestTransaction.contractId,
                     balance: contract.balance + BigInt(contract.asset.unit.amount),
                     asset: expect.objectContaining({
-                        payments: -1,
+                        payments: 0,
                         rev: 0,
                         state: "ACTIVE",
                         unit: expect.objectContaining({

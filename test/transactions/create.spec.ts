@@ -48,6 +48,14 @@ describe('Test Create Transaction', () => {
             expect(validTestTransaction).toBeInstanceOf(CreateContract);
         });
 
+        it('should create empty instance of CreateContract', async () => {
+            validTestTransaction = new CreateContractTransaction({});
+            expect(validTestTransaction).toBeInstanceOf(CreateContract);
+            expect(validTestTransaction.asset.recipientPublicKey).toEqual(
+                undefined,
+            );
+        });
+
         it('should set asset data', async () => {
             expect(validTestTransaction.asset.data).toEqual(
                 transactions.validCreateTransaction.input.asset.data,
@@ -158,6 +166,28 @@ describe('Test Create Transaction', () => {
             validTestTransaction.sign(defaultNetworkIdentifier, transactions.validCreateTransaction.passphrase);
             const errors = (validTestTransaction as any).applyAsset(store);
             expect(Object.keys(errors)).toHaveLength(0);
+        });
+
+        it('should return account exists errors', async () => {
+            let contract = {
+                ...defaultAccount,
+                address: "6095053878450376505L",
+                publicKey: "asdf",
+                balance: BigInt("100000000000000"),
+            }
+            store = new StateStoreMock([sender, recipient, contract]);
+
+            jest.spyOn(store.account, 'cache');
+            jest.spyOn(store.account, 'get');
+            jest.spyOn(store.account, 'getOrDefault');
+            jest.spyOn(store.account, 'set');
+            validTestTransaction.sign(defaultNetworkIdentifier, transactions.validCreateTransaction.passphrase);
+            const errors = await (validTestTransaction as any).applyAsset(store);
+            expect(errors.length).toEqual(1);
+            expect(errors[0]).toBeInstanceOf(TransactionError);
+            expect(errors[0].message).toContain(
+                '`contractPublicKey` already exists.',
+            );
         });
 
         it('should call state store', async () => {

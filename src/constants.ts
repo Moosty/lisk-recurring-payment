@@ -26,3 +26,11 @@ export const TYPES = [
     'MONTHS',
     'YEARS',
 ];
+
+export const slotTypes = {
+    [TYPES[0]]: 60, // minutes
+    [TYPES[1]]: 60 * 60, // hours
+    [TYPES[2]]: 24 * 60 * 60, // days
+    [TYPES[3]]: 30.4 * 24 * 60 * 60, // months
+    [TYPES[4]]: 365 * 24 * 60 * 60, // years
+}

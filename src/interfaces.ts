@@ -12,7 +12,7 @@ export interface ContractAsset {
     readonly recipientPublicKey: string;
     readonly senderPublicKey: string;
     readonly rev: number;
-    readonly start?: number; // todo functional for requests and activate when funded prepaid/1 unit
+    readonly start?: number;
     readonly payments: number;
     readonly lastBalance: string;
 }
@@ -73,6 +73,7 @@ export interface RequestAssetJSON {
 export interface TerminateAssetJSON {
     readonly contractPublicKey: string;
     readonly peerPublicKey: string;
+    readonly unit: number;
     readonly data?: string;
 }
 

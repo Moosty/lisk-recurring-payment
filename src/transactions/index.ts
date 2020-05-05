@@ -3,7 +3,6 @@ import { ReviewContract } from './review';
 import { RequestPayment } from './request';
 import { TerminateContract } from './terminate';
 import { FundContract } from './fund';
-import { Faucet } from './faucet';
 
 export {
     CreateContract,
@@ -11,5 +10,4 @@ export {
     ReviewContract,
     TerminateContract,
     FundContract,
-    Faucet,
 };

@@ -162,8 +162,7 @@ export class CreateContract extends BaseTransaction {
     protected async applyAsset(store: StateStore): Promise<ReadonlyArray<TransactionError>> {
         const errors: TransactionError[] = [];
         const contract = await store.account.getOrDefault(this.getContractId());
-
-        if (contract.balance > 0 || contract.publicKey !== this.asset.contractPublicKey || Object.keys(contract.asset).length > 0) {
+        if (contract.balance > BigInt(0) || contract.publicKey !== this.asset.contractPublicKey || Object.keys(contract.asset).length > 0) {
             errors.push(
                 new TransactionError(
                     '`contractPublicKey` already exists.',
@@ -194,7 +193,6 @@ export class CreateContract extends BaseTransaction {
         };
 
         store.account.set(contract.address, updatedContract);
-
         return errors;
     }
 

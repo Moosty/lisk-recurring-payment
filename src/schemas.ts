@@ -191,6 +191,10 @@ export const TerminateContractAssetSchema = {
             type: 'string',
             format: 'publicKey',
         },
+        unit: {
+            type: 'integer',
+            minimum: 0,
+        },
         data: {
             type: 'string',
             format: 'transferData',

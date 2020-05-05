@@ -24,6 +24,7 @@ export const transactions = {
     },
     validReviewTransaction: {
         passphrase: 'detail rose problem pupil they relief rice melt burden day pistol tiger',
+        passphraseWrong: 'creek own stem final gate scrub live shallow stage host concert they',
         senderId: '11495053542406076001L',
         contractId: '15435023355030673670L',
         contractPublicKey: '38a3ae5bef78e7923d7065eaae74727eb84fd5593c474d438271329b6a71f8c7',
@@ -88,6 +89,7 @@ export const transactions = {
             asset: {
                 contractPublicKey: '38a3ae5bef78e7923d7065eaae74727eb84fd5593c474d438271329b6a71f8c7',
                 peerPublicKey: '5c554d43301786aec29a09b13b485176e81d1532347a351aeafe018c199fd7ca',
+                unit: 1,
                 data: '{ reference: "abc"}',
             }
         }

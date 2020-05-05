@@ -10,7 +10,7 @@ import {
 import {PAYMENT_TYPE, STATES} from '../constants';
 import {RequestPaymentAssetSchema} from '../schemas';
 import {RequestTransactionJSON, RequestAssetJSON, ContractInterface} from '../interfaces';
-import {getContractAddress} from "../utils";
+import {getContractAddress, getNextSlot, getPastSlots} from "../utils";
 
 export class RequestPayment extends BaseTransaction {
     readonly asset = {} as RequestAssetJSON;
@@ -113,8 +113,6 @@ export class RequestPayment extends BaseTransaction {
                 );
             }
 
-            // todo calculate time lock error
-
             if (contract.asset.payments + 1 !== this.asset.unit) {
                 errors.push(
                     new TransactionError(
@@ -123,6 +121,19 @@ export class RequestPayment extends BaseTransaction {
                         '.asset.unit',
                         this.asset.unit,
                         contract.asset.payments + 1
+                    ),
+                );
+            }
+
+            const nextSlot = getNextSlot(contract.asset.start, contract.asset.unit.type, contract.asset.unit.typeAmount, contract.asset.payments);
+            if (nextSlot > store.chain.lastBlockHeader.timestamp) {
+                errors.push(
+                    new TransactionError(
+                        'No unlocked tokens available',
+                        this.id,
+                        '.timestamp',
+                        store.chain.lastBlockHeader.timestamp,
+                        `>= ${nextSlot}`
                     ),
                 );
             }
@@ -139,15 +150,32 @@ export class RequestPayment extends BaseTransaction {
                 );
             }
 
-            contract.balance -= BigInt(contract.asset.unit.amount);
-            sender.balance += BigInt(contract.asset.unit.amount);
+            const unitsAvailable = getPastSlots(
+                contract.asset.start,
+                store.chain.lastBlockHeader.timestamp,
+                contract.asset.unit.type,
+                contract.asset.unit.typeAmount,
+                contract.asset.payments
+            );
 
+            let payments = 1;
+            if (contract.balance < BigInt(unitsAvailable) * BigInt(contract.asset.unit.amount)) {
+                const availableBalance = contract.balance / (BigInt(unitsAvailable) * BigInt(contract.asset.unit.amount));
+                const availableUnits = Math.floor(Number.parseInt(availableBalance.toString()));
+                payments = contract.asset.payments + availableUnits;
+                contract.balance -= BigInt(availableUnits) * BigInt(contract.asset.unit.amount);
+                sender.balance += BigInt(availableUnits) * BigInt(contract.asset.unit.amount);
+            } else {
+                payments = contract.asset.payments + unitsAvailable;
+                contract.balance -= BigInt(unitsAvailable) * BigInt(contract.asset.unit.amount);
+                sender.balance += BigInt(unitsAvailable) * BigInt(contract.asset.unit.amount);
+            }
             const updatedContract: ContractInterface = {
                 ...contract,
                 asset: {
                     ...contract.asset,
-                    state: contract.asset.payments + 1 < contract.asset.unit.total ? STATES.ACTIVE : STATES.ENDED,
-                    payments: contract.asset.payments + 1,
+                    state: payments < contract.asset.unit.total ? STATES.ACTIVE : STATES.ENDED,
+                    payments: payments,
                 },
             };
             store.account.set(updatedContract.address, updatedContract);
@@ -160,19 +188,19 @@ export class RequestPayment extends BaseTransaction {
     protected async undoAsset(store: StateStore): Promise<ReadonlyArray<TransactionError>> {
         const sender = await store.account.get(this.senderId);
         const contract = await store.account.getOrDefault(getContractAddress(this.asset.contractPublicKey)) as ContractInterface;
-        contract.balance += BigInt(contract.asset.unit.amount);
+        const previousPayment = contract.asset.payments - (this.asset.unit - 1);
+        contract.balance += BigInt(previousPayment) * BigInt(contract.asset.unit.amount);
+        sender.balance -= BigInt(previousPayment) * BigInt(contract.asset.unit.amount);
 
         const updatedContract = {
             ...contract,
             asset: {
                 ...contract.asset,
                 state: STATES.ACTIVE,
-                payments: contract.asset.payments - 1,
+                payments: this.asset.unit - 1,
             },
         };
         store.account.set(updatedContract.address, updatedContract);
-
-        sender.balance -= BigInt(contract.asset.unit.amount);
         store.account.set(this.senderId, sender);
         return [];
     }
