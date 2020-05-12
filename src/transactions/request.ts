@@ -14,7 +14,7 @@ import {getContractAddress, getNextSlot, getPastSlots} from "../utils";
 
 export class RequestPayment extends BaseTransaction {
     readonly asset = {} as RequestAssetJSON;
-    public readonly TYPE = 125;
+    public static TYPE = 13040;
 
     public constructor(rawTransaction: unknown) {
         super(rawTransaction);

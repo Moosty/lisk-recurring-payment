@@ -17,7 +17,7 @@ import {Account} from "@liskhq/lisk-transactions/dist-node";
 
 export class ReviewContract extends BaseTransaction {
     public readonly asset: ReviewAssetJSON;
-    public readonly TYPE = 124;
+    public static TYPE = 13020;
 
     public constructor(rawTransaction: unknown) {
         super(rawTransaction);

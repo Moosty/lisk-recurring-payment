@@ -14,7 +14,7 @@ import {getContractAddress, getPastSlots} from "../utils";
 
 export class TerminateContract extends BaseTransaction {
     readonly asset: TerminateAssetJSON;
-    readonly TYPE = 126;
+    public static TYPE = 13050;
 
     public constructor(rawTransaction: unknown) {
         super(rawTransaction);

@@ -14,7 +14,7 @@ import {getContractAddress} from "../utils";
 
 export class FundContract extends BaseTransaction {
     readonly asset: FundAssetJSON;
-    public readonly TYPE = 127;
+    public static TYPE = 13030;
 
     public constructor(rawTransaction: unknown) {
         super(rawTransaction);

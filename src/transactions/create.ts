@@ -15,7 +15,7 @@ import {getContractAddress, assetBytesToPublicKey} from '../utils';
 
 export class CreateContract extends BaseTransaction {
     public readonly asset: CreateAssetJSON;
-    public readonly TYPE = 123;
+    public static TYPE = 13010;
 
     public constructor(rawTransaction: unknown) {
         super(rawTransaction);

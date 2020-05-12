@@ -1,4 +1,4 @@
-import { Account } from "@liskhq/lisk-transactions/dist-node";
+import { Account } from "@liskhq/lisk-transactions";
 
 export interface ContractInterface extends Account{
     readonly asset: ContractAsset;
