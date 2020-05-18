@@ -12,6 +12,9 @@ import {TYPES, PAYMENT_TYPE, STATES} from '../constants';
 import {CreateContractAssetSchema} from '../schemas';
 import {CreateTransactionJSON, CreateAssetJSON} from '../interfaces';
 import {getContractAddress, assetBytesToPublicKey} from '../utils';
+import {Account } from "@liskhq/lisk-chain";
+import { AccountJSON } from '@liskhq/lisk-chain/dist-node/types';
+import { accountDefaultValues } from '@liskhq/lisk-chain/dist-node/account';
 
 export class CreateContract extends BaseTransaction {
     public readonly asset: CreateAssetJSON;
@@ -174,7 +177,8 @@ export class CreateContract extends BaseTransaction {
         }
 
         const updatedContract = {
-            ...contract,
+            ...accountDefaultValues,
+            address: this.getContractId(),
             publicKey: this.getContractPublicKey(),
             asset: {
                 type: PAYMENT_TYPE,
@@ -186,13 +190,14 @@ export class CreateContract extends BaseTransaction {
                 recipientPublicKey: this.asset.recipientPublicKey,
                 senderPublicKey: this.asset.senderPublicKey,
                 payments: 0,
-                lastBalance: 0,
+                lastBalance: '0',
                 start: 0,
                 title: this.asset.title,
+                initialTx: this.id,
             },
-        };
+        } as AccountJSON;
 
-        store.account.set(contract.address, updatedContract);
+        store.account.set(contract.address, new Account(updatedContract));
         return errors;
     }
 

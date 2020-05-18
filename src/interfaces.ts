@@ -15,6 +15,7 @@ export interface ContractAsset {
     readonly start?: number;
     readonly payments: number;
     readonly lastBalance: string;
+    readonly initialTx: string;
 }
 
 export interface TransactionJSON {
