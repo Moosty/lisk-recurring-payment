@@ -203,11 +203,12 @@ export class CreateContract extends BaseTransaction {
 
     protected async undoAsset(store: StateStore): Promise<ReadonlyArray<TransactionError>> {
         const contract = await store.account.getOrDefault(this.getContractId());
+        // @ts-ignore
         const updatedContract = {
             ...contract,
             asset: {},
-        };
-        store.account.set(updatedContract.address, updatedContract);
+        } as AccountJSON;
+        store.account.set(updatedContract.address, new Account(updatedContract));
 
         return [];
     }

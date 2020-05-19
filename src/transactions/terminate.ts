@@ -7,6 +7,8 @@ import {
     TransactionError,
     convertToAssetError,
 } from '@liskhq/lisk-transactions';
+import {Account} from "@liskhq/lisk-chain";
+import {AccountJSON} from '@liskhq/lisk-chain/dist-node/types';
 import {PAYMENT_TYPE, STATES} from '../constants';
 import {TerminateContractAssetSchema} from '../schemas';
 import {TerminateTransactionJSON, TerminateAssetJSON, ContractInterface} from '../interfaces';
@@ -172,17 +174,19 @@ export class TerminateContract extends BaseTransaction {
                 contract.balance -= contract.balance;
             }
 
+            // @ts-ignore
             const updatedContract = {
                 ...contract,
                 asset: {
+                    ...contract.asset,
                     state: this.senderPublicKey === contract.asset.recipientPublicKey ?
                         STATES.TERMINATED_RECIPIENT : STATES.TERMINATED_SENDER,
-                    lastBalance: oldBalance,
+                    lastBalance: oldBalance.toString(),
                     payments: payments,
                 },
-            };
+            } as AccountJSON;
 
-            store.account.set(updatedContract.address, updatedContract);
+            store.account.set(updatedContract.address, new Account(updatedContract));
             store.account.set(sender.address, sender);
             store.account.set(recipient.address, recipient);
         }
@@ -208,15 +212,16 @@ export class TerminateContract extends BaseTransaction {
             contract.balance += leftOverBalance;
         }
 
+        // @ts-ignore
         const updatedContract = {
             ...contract,
             asset: {
                 state: STATES.ACTIVE,
                 lastBalance: "",
             },
-        };
+        } as AccountJSON;
 
-        store.account.set(updatedContract.address, updatedContract);
+        store.account.set(updatedContract.address, new Account(updatedContract));
         store.account.set(sender.address, sender);
         store.account.set(recipient.address, recipient);
 

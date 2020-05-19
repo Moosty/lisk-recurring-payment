@@ -22,3 +22,10 @@ export const getPastSlots = (start, now, type, length, unit) => {
     const slot = slotTypes[type] * length;
     return Math.floor((now - start) / slot) - unit;
 }
+
+// start : 1554630
+// now :   1556630
+// 60 * 1: 60
+// unit : 0
+// slot : 60
+

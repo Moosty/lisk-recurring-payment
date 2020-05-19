@@ -8,12 +8,13 @@ import {
     convertToAssetError,
     constants,
 } from '@liskhq/lisk-transactions';
+import {Account} from "@liskhq/lisk-chain";
+import {AccountJSON} from '@liskhq/lisk-chain/dist-node/types';
 import _ from 'lodash';
 import {TYPES, PAYMENT_TYPE, STATES} from '../constants';
 import {ReviewContractAssetSchema} from '../schemas';
 import {ReviewTransactionJSON, ReviewAssetJSON, ContractInterface} from '../interfaces';
 import {getContractAddress} from '../utils';
-import {Account} from "@liskhq/lisk-transactions/dist-node";
 
 export class ReviewContract extends BaseTransaction {
     public readonly asset: ReviewAssetJSON;
@@ -204,9 +205,9 @@ export class ReviewContract extends BaseTransaction {
             }
 
             if ((contract.asset.state === STATES.SENDER_REVIEW &&
-                contract.asset.recipientPublicKey === this.senderPublicKey) ||
+                contract.asset.senderPublicKey !== this.senderPublicKey) ||
                 (contract.asset.state === STATES.RECIPIENT_REVIEW &&
-                    contract.asset.senderPublicKey === this.senderPublicKey)) {
+                    contract.asset.recipientPublicKey !== this.senderPublicKey)) {
                 errors.push(
                     new TransactionError(
                         'The other party needs to review the contract',
@@ -218,14 +219,15 @@ export class ReviewContract extends BaseTransaction {
             }
 
             if (this.asset.accept) {
-                store.account.set(contract.address, {
+                // @ts-ignore
+                store.account.set(contract.address, new Account({
                     ...contract,
                     asset: {
                         ...contract.asset,
                         state: STATES.ACCEPTED,
                         start: store.chain.lastBlockHeader.timestamp
                     },
-                });
+                }));
             } else if (!this.asset.accept) {
                 if (contract.asset.type && contract.asset.type === PAYMENT_TYPE) {
                     _.map(this.asset.unitOld, (value, key) => {
@@ -243,7 +245,8 @@ export class ReviewContract extends BaseTransaction {
                     });
                 }
 
-                store.account.set(contract.address, {
+                // @ts-ignore
+                const updatedContract = {
                     ...contract,
                     asset: {
                         ...contract.asset,
@@ -254,7 +257,9 @@ export class ReviewContract extends BaseTransaction {
                             ...this.asset.unit,
                         },
                     },
-                });
+                } as AccountJSON;
+
+                store.account.set(contract.address, new Account(updatedContract));
             }
         }
 
@@ -264,14 +269,16 @@ export class ReviewContract extends BaseTransaction {
     protected async undoAsset(store: StateStore): Promise<ReadonlyArray<TransactionError>> {
         const contract = await store.account.getOrDefault(getContractAddress(this.asset.contractPublicKey)) as ContractInterface;
         if (this.asset.accept) {
-            store.account.set(contract.address, {
+            // @ts-ignore
+            store.account.set(contract.address, new Account({
                 ...contract,
                 asset: {
                     ...contract.asset,
                     state: contract.asset.senderPublicKey === this.senderPublicKey ? STATES.SENDER_REVIEW : STATES.RECIPIENT_REVIEW,
                 },
-            });
+            }));
         } else if (!this.asset.accept) {
+            // @ts-ignore
             const updatedContract = {
                 ...contract,
                 asset: {
@@ -283,8 +290,8 @@ export class ReviewContract extends BaseTransaction {
                         ...this.asset.unitOld,
                     }
                 },
-            } as Account;
-            store.account.set(updatedContract.address, updatedContract);
+            } as AccountJSON;
+            store.account.set(updatedContract.address, new Account(updatedContract));
         }
         return [];
     }

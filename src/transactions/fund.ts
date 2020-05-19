@@ -7,6 +7,8 @@ import {
     TransactionError,
     convertToAssetError,
 } from '@liskhq/lisk-transactions';
+import {Account} from "@liskhq/lisk-chain";
+import {AccountJSON} from '@liskhq/lisk-chain/dist-node/types';
 import { PAYMENT_TYPE, STATES} from '../constants';
 import {FundAssetSchema} from '../schemas';
 import {FundAssetJSON, FundTransactionJSON, ContractInterface} from '../interfaces';
@@ -154,15 +156,16 @@ export class FundContract extends BaseTransaction {
             }
 
             contract.balance += BigInt(contract.asset.unit.amount) * BigInt(this.asset.units);
-            const updatedContract: ContractInterface = {
+            // @ts-ignore
+            const updatedContract = {
                 ...contract,
                 asset: {
                     ...contract.asset,
                     state: STATES.ACTIVE,
                     start: contract.asset.state === STATES.ACCEPTED ? store.chain.lastBlockHeader.timestamp : contract.asset.start,
                 },
-            };
-            store.account.set(updatedContract.address, updatedContract);
+            } as AccountJSON;
+            store.account.set(updatedContract.address, new Account(updatedContract));
 
             sender.balance -= BigInt(contract.asset.unit.amount) * BigInt(this.asset.units);
             store.account.set(this.senderId, sender);
@@ -175,14 +178,15 @@ export class FundContract extends BaseTransaction {
         const contract = await store.account.getOrDefault(getContractAddress(this.asset.contractPublicKey)) as ContractInterface;
         contract.balance -= BigInt(contract.asset.unit.amount) * BigInt(this.asset.units);
 
+        // @ts-ignore
         const updatedContract = {
             ...contract,
             asset: {
                 ...contract.asset,
                 state: contract.balance > BigInt(contract.asset.unit.prepaid || 1) * BigInt(contract.asset.unit.amount) || contract.asset.payments > 0 ? STATES.ACTIVE : STATES.ACCEPTED,
             },
-        };
-        store.account.set(updatedContract.address, updatedContract);
+        } as AccountJSON;
+        store.account.set(updatedContract.address, new Account(updatedContract));
 
         sender.balance += BigInt(contract.asset.unit.amount) * BigInt(this.asset.units);
         store.account.set(this.senderId, sender);

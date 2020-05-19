@@ -7,6 +7,8 @@ import {
     TransactionError,
     convertToAssetError,
 } from '@liskhq/lisk-transactions';
+import {Account} from "@liskhq/lisk-chain";
+import {AccountJSON} from '@liskhq/lisk-chain/dist-node/types';
 import {PAYMENT_TYPE, STATES} from '../constants';
 import {RequestPaymentAssetSchema} from '../schemas';
 import {RequestTransactionJSON, RequestAssetJSON, ContractInterface} from '../interfaces';
@@ -158,9 +160,9 @@ export class RequestPayment extends BaseTransaction {
                 contract.asset.payments
             );
 
-            let payments = 1;
-            if (contract.balance < BigInt(unitsAvailable) * BigInt(contract.asset.unit.amount)) {
-                const availableBalance = contract.balance / (BigInt(unitsAvailable) * BigInt(contract.asset.unit.amount));
+            let payments = 0;
+            if (contract.balance <= BigInt(BigInt(unitsAvailable) * BigInt(contract.asset.unit.amount))) {
+                const availableBalance = contract.balance / BigInt(contract.asset.unit.amount);
                 const availableUnits = Math.floor(Number.parseInt(availableBalance.toString()));
                 payments = contract.asset.payments + availableUnits;
                 contract.balance -= BigInt(availableUnits) * BigInt(contract.asset.unit.amount);
@@ -170,17 +172,17 @@ export class RequestPayment extends BaseTransaction {
                 contract.balance -= BigInt(unitsAvailable) * BigInt(contract.asset.unit.amount);
                 sender.balance += BigInt(unitsAvailable) * BigInt(contract.asset.unit.amount);
             }
-            const updatedContract: ContractInterface = {
+            // @ts-ignore
+            const updatedContract = {
                 ...contract,
                 asset: {
                     ...contract.asset,
                     state: payments < contract.asset.unit.total ? STATES.ACTIVE : STATES.ENDED,
                     payments: payments,
                 },
-            };
-            store.account.set(updatedContract.address, updatedContract);
+            } as AccountJSON;
+            store.account.set(updatedContract.address, new Account(updatedContract));
             store.account.set(this.senderId, sender);
-
         }
         return errors;
     }
@@ -192,6 +194,7 @@ export class RequestPayment extends BaseTransaction {
         contract.balance += BigInt(previousPayment) * BigInt(contract.asset.unit.amount);
         sender.balance -= BigInt(previousPayment) * BigInt(contract.asset.unit.amount);
 
+        // @ts-ignore
         const updatedContract = {
             ...contract,
             asset: {
@@ -199,8 +202,8 @@ export class RequestPayment extends BaseTransaction {
                 state: STATES.ACTIVE,
                 payments: this.asset.unit - 1,
             },
-        };
-        store.account.set(updatedContract.address, updatedContract);
+        } as AccountJSON;
+        store.account.set(updatedContract.address, new Account(updatedContract));
         store.account.set(this.senderId, sender);
         return [];
     }
